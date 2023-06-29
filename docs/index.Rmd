@@ -1,0 +1,133 @@
+---
+title: "Customer Segmenting"
+author: "gvant"
+date: "2023-06-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(stats)
+library(clustMixType)
+library(tibble)
+library(caret)
+```
+
+## Loading Dataset
+
+```{r 1}
+telco <- data.frame(read.csv("telco.csv"))
+head(telco)
+
+summary(is.na(telco))
+```
+As we can see, the data here is pretty complete, but there are some null values in Total Charges I'd like to investigate.
+
+```{r 2}
+telco[is.na(telco$TotalCharges),]
+```
+
+Given that the "tenure" column is zero for all of the null values for Total Charges, it is safe to assume that these are brand new customers. Therefore, it is best to replace these null values with "0" since they haven't yet accumulated any charges. It is also better to appropriately apply "0,1" coding to binary variables, as well as correctly list applicable categories as factors.
+
+
+```{r 3}
+telco$TotalCharges[is.na(telco$TotalCharges)] <- 0
+
+# binary coding
+telco[,c(4,5,7,8,10:15,17,21)] <- as.numeric(ifelse(telco[,c(4,5,7,8,10:15,17,21)]=="Yes", 1, 0))
+
+# categorical / factorized coding
+for (i in c(2,9,16,18)){
+  telco[,i] <- as.factor(telco[,i])
+}
+```
+
+Now that the data has been fixed, the first method of analysis can begin. The goal here is to segment customers based on clusters. However, we are not sure which kinds of clusters we should make or how many. We can start with K-Proto clustering and use the elbow method in order to figure out an optimal number of clusters.We can also test if using the Gower Dissimilarity method makes a difference.
+
+```{r 4, echo=FALSE}
+# our "within clusters sum of squares" will serve as a metric for evaluating numerous clusters. We want at least two, and at most ten.
+wcss <- vector()
+wcssg <- vector()
+for (i in 2:10){
+  kmi <- kproto(telco[,-1], i)
+  kmig <- kproto_gower(telco[,-1], i)
+  wcss[i] <- sum(kmi$withinss)
+  wcssg[i] <- sum(kmig$withinss)
+}
+tibble("Centers"=c(2:10),"SS for K-Proto"=wcss[2:10], "SS for K-Proto (with Gower)"=wcssg[2:10])
+
+plot(c(2:10), wcss[2:10], main="Elbow Curve for K-Proto", xlab="K-Value", ylab="WCSS", 
+     type="b", col="black", lwd=2)
+points(3,wcss[3], pch=8, col="red", lwd=5)
+text(3,wcss[3], "Elbow Point", pos=4, cex=.9, offset=1)
+
+plot(c(2:10), wcssg[2:10], main="Elbow Curve for K-Proto (with Gower)", xlab="K-Value", ylab="WCSS", 
+     type="b", col="black", lwd=2)
+points(4,wcssg[4], pch=8, col="red", lwd=5)
+text(4,wcssg[4], "Elbow Point", pos=4, cex=.9, offset=1)
+```
+
+Both curves show a level of ambiguity with respect to the elbow point, which means that a bit of intuition can be applied here. We know that we would like to keep the number of categories small (all other things considered). This is because if the company were to run targeted advertisements, it would be more cost-efficient to apply a small number of pricing models: one for each 'type' of customer.
+
+Let us examine the groups more closely.
+```{r 5}
+k_opt <- kproto(telco[,-1], 3)
+kg_opt <- kproto(telco[,-1], 4)
+
+clprofiles(k_opt, telco[,-1])
+clprofiles(kg_opt, telco[,-1])
+```
+After a thorough analysis of both sets of graphs, I see a similar trend being conveyed. Adding a fourth category does not appear to add any more clarity or distinction to the model, so the three-category model will suffice.
+
+```{r 6}
+centers <- data.frame(k_opt$centers)
+proportions <- tibble("Cluster"=c(1:3),"Proportion"=table(k_opt$cluster)/nrow(telco))
+
+vars <- c()
+for (i in 1:ncol(centers)){
+  if (class(centers[,i]) == "numeric"){
+    vars[i] <- sd(centers[,i])
+  }else{
+    vars[i] <- NA
+  }
+}
+
+total.variance <- data.frame(t(rbind(centers,vars)))
+total.variance <- data.frame(row.names(total.variance), total.variance)
+colnames(total.variance) = c("Variable", "Cluster1", "Cluster2", "Cluster3", "SDev")
+rownames(total.variance) = NULL
+
+total.variance <- total.variance[order(total.variance$SDev, decreasing=T),]
+
+proportions
+tibble(total.variance)
+```
+Here's a table sorted by standard deviation, which tells us the most significant categories sorted by standard deviation. We can see that what sets the categories apart most are the total and monthly charges, as well as how long each customer has been a member.Here, we can create a few categories for customers using the averages from the data.
+
+## The Titan
+### Cluster Three
+**Average Monthly Charges: $96**
+**Average Tenure: 5+ Years**
+Characteristics:
+* Long-term contracts
+* Has full bundle complete with streaming
+* Has multiple phone lines
+* Very unlikely to churn
+
+## The Casual Customer
+### Cluster Two
+**Average Monthly Charges: $77**
+**Average Tenure: 3.5 Years**
+Characteristics:
+* One-year and Month-to-month contracts
+* Has internet bundle, but may or may not have fiber optic
+* Sometimes opts for streaming bundle
+
+## The Nomad
+### Cluster One
+**Average Monthly Charges: $48**
+**Average Tenure: 1.5 Years**
+Characteristics:
+* Month-to-month contracts
+* Hardly utilizes company bundles
+* High churn rate
+* Usually younger
