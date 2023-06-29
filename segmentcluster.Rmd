@@ -67,7 +67,7 @@ text(4,wcssg[4], "Elbow Point", pos=4, cex=.9, offset=1)
 ```
 
 Both curves show a level of ambiguity with respect to the elbow point, which means that a bit of intuition can be applied here. We know that we would like to keep the number of categories small (all other things considered). This is because if the company were to run targeted advertisements, it would be more cost-efficient to apply a small number of pricing models: one for each 'type' of customer.
-
+ 
 Let us examine the groups more closely.
 ```{r 5}
 k_opt <- kproto(telco[,-1], 3)
