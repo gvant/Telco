@@ -43,7 +43,7 @@ for (i in c(2,9,16,18)){
 
 Now that the data has been fixed, the first method of analysis can begin. The goal here is to segment customers based on clusters. However, we are not sure which kinds of clusters we should make or how many. We can start with K-Proto clustering and use the elbow method in order to figure out an optimal number of clusters.We can also test if using the Gower Dissimilarity method makes a difference.
 
-```{r 4, echo=FALSE}
+```{r 4, include=FALSE}
 # our "within clusters sum of squares" will serve as a metric for evaluating numerous clusters. We want at least two, and at most ten.
 wcss <- vector()
 wcssg <- vector()
@@ -53,6 +53,9 @@ for (i in 2:10){
   wcss[i] <- sum(kmi$withinss)
   wcssg[i] <- sum(kmig$withinss)
 }
+```
+
+```{r 5}
 tibble("Centers"=c(2:10),"SS for K-Proto"=wcss[2:10], "SS for K-Proto (with Gower)"=wcssg[2:10])
 
 plot(c(2:10), wcss[2:10], main="Elbow Curve for K-Proto", xlab="K-Value", ylab="WCSS", 
